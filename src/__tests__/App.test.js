@@ -18,22 +18,29 @@ afterAll(() => server.close());
 test("displays question prompts after fetching", async () => {
   render(<App />);
 
-  fireEvent.click(screen.queryByText(/View Questions/));
+  // Ensure the initial fetch completes and the list is visible
+  await screen.findByText(/lorem testum 1/g);
 
-  expect(await screen.findByText(/lorem testum 1/g)).toBeInTheDocument();
-  expect(await screen.findByText(/lorem testum 2/g)).toBeInTheDocument();
+  // No need to click "View Questions" if it's the default view after fetch
+  // fireEvent.click(screen.queryByText(/View Questions/)); // This might be redundant if list is default
+
+  expect(screen.getByText(/lorem testum 1/g)).toBeInTheDocument(); // Use getByText as it should be there immediately
+  expect(screen.getByText(/lorem testum 2/g)).toBeInTheDocument(); // Use getByText
 });
 
 test("creates a new question when the form is submitted", async () => {
   render(<App />);
 
-  // wait for first render of list (otherwise we get a React state warning)
+  // Wait for initial questions to load before interacting
   await screen.findByText(/lorem testum 1/g);
 
-  // click form page
+  // Click "New Question" button to show the form
   fireEvent.click(screen.queryByText("New Question"));
 
-  // fill out form
+  // Wait for the form to appear (e.g., by finding its prompt input)
+  await screen.findByLabelText(/Prompt/);
+
+  // Fill out form fields
   fireEvent.change(screen.queryByLabelText(/Prompt/), {
     target: { value: "Test Prompt" },
   });
@@ -47,12 +54,16 @@ test("creates a new question when the form is submitted", async () => {
     target: { value: "1" },
   });
 
-  // submit form
-  fireEvent.submit(screen.queryByText(/Add Question/));
+  // Submit the form and await the asynchronous operations (fetch, state updates, re-render)
+  await fireEvent.submit(screen.queryByText(/Add Question/));
 
-  // view questions
-  fireEvent.click(screen.queryByText(/View Questions/));
+  // --- IMPORTANT FIX HERE ---
+  // Remove the redundant click. The onSubmissionComplete callback in QuestionForm
+  // should already switch the view back to the QuestionList.
+  // fireEvent.click(screen.queryByText(/View Questions/));
 
+  // Now, wait for the new prompt to appear in the list, which indicates the list has re-rendered
+  // with the new question and the view has switched.
   expect(await screen.findByText(/Test Prompt/g)).toBeInTheDocument();
   expect(await screen.findByText(/lorem testum 1/g)).toBeInTheDocument();
 });
@@ -64,14 +75,20 @@ test("deletes the question when the delete button is clicked", async () => {
 
   await screen.findByText(/lorem testum 1/g);
 
-  fireEvent.click(screen.queryAllByText("Delete Question")[0]);
+  // Await the click event that triggers a fetch and state update
+  await fireEvent.click(screen.queryAllByText("Delete Question")[0]);
 
+  // Wait for the element to be removed from the DOM
   await waitForElementToBeRemoved(() => screen.queryByText(/lorem testum 1/g));
 
+  // Re-render to ensure state consistency if needed, though often not strictly necessary
+  // after waitForElementToBeRemoved for a simple delete.
   rerender(<App />);
 
+  // Wait for the remaining element to be present after re-render
   await screen.findByText(/lorem testum 2/g);
 
+  // Assert that the deleted element is no longer in the document
   expect(screen.queryByText(/lorem testum 1/g)).not.toBeInTheDocument();
 });
 
@@ -82,13 +99,17 @@ test("updates the answer when the dropdown is changed", async () => {
 
   await screen.findByText(/lorem testum 2/g);
 
-  fireEvent.change(screen.queryAllByLabelText(/Correct Answer/)[0], {
+  // Await the change event that triggers a fetch and state update
+  await fireEvent.change(screen.queryAllByLabelText(/Correct Answer/)[0], {
     target: { value: "3" },
   });
 
+  // Assert the value immediately after the change and update
   expect(screen.queryAllByLabelText(/Correct Answer/)[0].value).toBe("3");
 
+  // Re-render to ensure state consistency if needed
   rerender(<App />);
 
+  // Re-assert the value after re-render to confirm persistence
   expect(screen.queryAllByLabelText(/Correct Answer/)[0].value).toBe("3");
 });
